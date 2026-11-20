@@ -25,7 +25,7 @@
   .controls .lbl{font-weight:800;font-size:15px;margin-right:4px}
   .people{display:flex;gap:8px;flex-wrap:wrap}
   .person{display:flex;align-items:center;gap:8px;border:2px solid #E5E7EB;background:#fff;border-radius:999px;padding:4px 14px 4px 4px;font:inherit;font-weight:800;cursor:pointer;color:var(--ink)}
-  .person svg{width:38px;height:38px;border-radius:50%}
+  .person svg,.person img{width:38px;height:38px;border-radius:50%;object-fit:cover;object-position:50% 30%}
   .person[aria-pressed="true"]{border-color:var(--purple);background:var(--purple-soft)}
   .person:hover{border-color:#C4B5FD}
   .toggle{display:flex;align-items:center;gap:8px;font-weight:700;cursor:pointer;user-select:none}
@@ -158,7 +158,7 @@
       <!-- Round 1 -->
       <div class="r1" id="r1">
         <h2>Round 1</h2>
-        <p>What would <b>Sam</b> look like if Sam were <b>old</b>?</p>
+        <p id="r1q"></p>
         <button class="btn primary big" id="doAgeBtn">do(Age = old)</button>
         <button class="btn ghost hide" id="whatBtn" style="font-size:18px;padding:12px 22px">🔍 What changed?</button>
       </div>
@@ -196,25 +196,31 @@
     <button class="btn primary" id="nextBtn">Next →</button>
   </div>
 
-  <footer>A counterfactual image demo · toy pictures for now: real AI-generated faces coming soon</footer>
+  <footer>A counterfactual image demo · all portraits are AI-generated counterfactuals, not real photos</footer>
 </div>
 
 <script>
 /* ------------------------------------------------------------------
-   SWAPPING IN REAL IMAGES
-   Set USE_REAL_IMAGES = true and put one image per person and attribute
-   combination in an "images/" folder next to this page, named:
-     images/<person>_age<0|1>_grey<0|1>_wrinkles<0|1>_glasses<0|1>_style<0|1>.png
-   e.g. images/sam_age1_grey1_wrinkles1_glasses0_style0.png
+   REAL IMAGES
+   The "images/" folder next to this page holds one portrait per person
+   and attribute combination (16 per person), named:
+     images/<person>_grey<0|1>_wrinkles<0|1>_glasses<0|1>_style<0|1>.png
+   e.g. images/olivia_grey1_wrinkles1_glasses0_style0.png
+   Set USE_REAL_IMAGES = false to go back to the toy drawings.
 ------------------------------------------------------------------- */
-const USE_REAL_IMAGES = false;
+const USE_REAL_IMAGES = true;
 const imagePath = (pid, s) =>
-  `images/${pid}_age${s.age}_grey${s.grey}_wrinkles${s.wrinkles}_glasses${s.glasses}_style${s.style}.png`;
+  `images/${pid}_grey${s.grey}_wrinkles${s.wrinkles}_glasses${s.glasses}_style${s.style}.png`;
 
+/* Each person's starting point. age: 0 young / 1 old. eyesight: 0 good / 1 poor
+   (poor = starts with glasses). era: 0 today / 1 long ago (= starts with cap & jacket). */
 const PEOPLE = {
-  sam:  {name:'Sam',  age:0, eyesight:0, era:0},
-  alex: {name:'Alex', age:0, eyesight:1, era:0},
+  olivia: {name:'Olivia Rodrigo',     short:'Olivia', age:0, eyesight:0, era:0},
+  tom:    {name:'Tom Holland',        short:'Tom',    age:0, eyesight:0, era:0},
+  david:  {name:'David Attenborough', short:'David',  age:1, eyesight:0, era:0},
+  morgan: {name:'Morgan Freeman',     short:'Morgan', age:1, eyesight:0, era:0},
 };
+const DEFAULT_PERSON = Object.keys(PEOPLE)[0];
 const NODE = {
   age:      {label:'Age',         vals:['young','old']},
   eyesight: {label:'Eyesight',    vals:['good','poor']},
@@ -222,7 +228,7 @@ const NODE = {
   grey:     {label:'Grey hair',   vals:['no','yes']},
   wrinkles: {label:'Wrinkles',    vals:['no','yes']},
   glasses:  {label:'Eyeglasses',  vals:['no','yes']},
-  style:    {label:'Style',       vals:['hoodie','cap & cardigan']},
+  style:    {label:'Style',       vals:['t-shirt','cap & jacket']},
 };
 const FEATURES = ['grey','wrinkles','glasses','style'];
 const INCOMING = {grey:'e-age-grey', wrinkles:'e-age-wr', glasses:'e-eye-gl', style:'e-era-st'};
@@ -296,11 +302,18 @@ function faceSVG(s){
   return o + `</svg>`;
 }
 function describe(s){
-  return `Face with ${s.grey?'grey':'brown'} hair, ${s.wrinkles?'wrinkles':'no wrinkles'}, ${s.glasses?'glasses':'no glasses'}, wearing ${s.style?'a cap and cardigan':'a hoodie'}`;
+  return `Face with ${s.grey?'grey':'brown'} hair, ${s.wrinkles?'wrinkles':'no wrinkles'}, ${s.glasses?'glasses':'no glasses'}, wearing ${s.style?'a cap and jacket':'a t-shirt'}`;
 }
 function paintImage(el, pid, s){
   el.className = 'img';
   el.innerHTML = USE_REAL_IMAGES ? `<img src="${imagePath(pid,s)}" alt="${describe(s)}">` : faceSVG(s);
+}
+const avatar = (pid, s) => USE_REAL_IMAGES ? `<img src="${imagePath(pid,s)}" alt="">` : faceSVG(s);
+/* Load a person's 16 portraits ahead of time so reveals do not flicker. */
+function preload(pid){
+  if (!USE_REAL_IMAGES) return;
+  for (let i = 0; i < 16; i++)
+    new Image().src = imagePath(pid, {grey:i&1, wrinkles:i>>1&1, glasses:i>>2&1, style:i>>3&1});
 }
 
 
@@ -368,7 +381,7 @@ function buildGraph(){
 
 /* ---------- State ---------- */
 const st = {
-  stage:1, person:'sam', doVar:null, val:null, phase:'idle', predict:false,
+  stage:1, person:DEFAULT_PERSON, doVar:null, val:null, phase:'idle', predict:false,
   gReg:new Set(), gCau:new Set(), imageHint:false,
   arrows:new Set(), decoys:new Set(), r1Chips:false,
 };
@@ -381,9 +394,9 @@ function setIntervention(v, phase){
 }
 function goStage(n){
   st.stage = n;
-  if (n === 1){ st.r1Chips = false; st.arrows.clear(); st.decoys.clear(); st.gReg = new Set(); st.gCau = new Set(); st.person = 'sam'; st.predict = false; st.doVar = null; st.phase = 'idle'; st.imageHint = false; }
-  if (n === 2){ st.person = 'sam'; st.predict = false; setIntervention('age', 'revealed'); }
-  if (n === 3){ st.person = 'sam'; st.predict = true; setIntervention('grey', 'predict'); }
+  if (n === 1){ st.r1Chips = false; st.arrows.clear(); st.decoys.clear(); st.gReg = new Set(); st.gCau = new Set(); st.person = DEFAULT_PERSON; st.predict = false; st.doVar = null; st.phase = 'idle'; st.imageHint = false; }
+  if (n === 2){ st.person = DEFAULT_PERSON; st.predict = false; setIntervention('age', 'revealed'); }
+  if (n === 3){ st.person = DEFAULT_PERSON; st.predict = true; setIntervention('grey', 'predict'); }
   render();
 }
 function onNode(id){
@@ -433,6 +446,9 @@ function render(){
   $('graphSub').innerHTML = S === 2
     ? 'Which arrows belong in the graph? Add them one by one.'
     : '👆 Click a node to <b>intervene</b>: set it yourself and see what happens.';
+  const ageTo = NODE.age.vals[1 - p.age];
+  $('r1q').innerHTML = `What would <b>${p.short}</b> look like if ${p.short} were <b>${ageTo}</b>?`;
+  $('doAgeBtn').textContent = `do(Age = ${ageTo})`;
   $('doAgeBtn').disabled = S === 1 && st.phase === 'revealed';
   $('whatBtn').classList.toggle('hide', !(S === 1 && st.phase === 'revealed' && !st.r1Chips));
   if (S === 2) renderArrows();
@@ -491,7 +507,7 @@ function render(){
   } else {
     for (const el of [imgReg, imgCau]){
       el.className = st.doVar ? 'img wait' : 'img wait small';
-      el.innerHTML = st.doVar ? '?' : (S === 1 ? 'Press do(Age = old)' : 'Click a node in the graph');
+      el.innerHTML = st.doVar ? '?' : (S === 1 ? `Press do(Age = ${ageTo})` : 'Click a node in the graph');
     }
     $('chipsReg').innerHTML = $('chipsCau').innerHTML = '';
   }
@@ -544,8 +560,9 @@ function render(){
 function init(){
   const box = $('people');
   box.innerHTML = Object.entries(PEOPLE).map(([pid, p]) =>
-    `<button class="person" data-pid="${pid}" aria-pressed="false">${faceSVG(causalWorld({age:p.age, eyesight:p.eyesight, era:p.era}))}${p.name}</button>`).join('');
-  box.querySelectorAll('.person').forEach(b => b.onclick = () => { st.person = b.dataset.pid; reset(); });
+    `<button class="person" data-pid="${pid}" aria-pressed="false">${avatar(pid, causalWorld({age:p.age, eyesight:p.eyesight, era:p.era}))}${p.name}</button>`).join('');
+  box.querySelectorAll('.person').forEach(b => b.onclick = () => { st.person = b.dataset.pid; preload(st.person); reset(); });
+  preload(DEFAULT_PERSON);
   $('predictToggle').onchange = e => { st.predict = e.target.checked; if (st.phase==='predict') st.phase='revealed'; render(); };
   $('resetBtn').onclick = reset;
   $('doAgeBtn').onclick = () => { setIntervention('age', 'revealed'); render(); };
